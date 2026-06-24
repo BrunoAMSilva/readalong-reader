@@ -188,13 +188,6 @@ These are planned next steps — contributions welcome:
 
 - **Richer article rendering** — keep inline images, figures, and embedded video
   from the source (currently text + headings only).
-- **Safari "extract article" Shortcut** — a companion Apple Shortcut that sends
-  the current Reader-mode article straight into the component, avoiding brittle
-  client-side extraction.
-- **Subscriptions & daily highlights (optional backend)** — import an OPML/Feedly
-  export, auto-summarize new articles, learn reading preferences from what you
-  actually finish, and surface a personalized "highlights of the day" queue.
-- More voices/languages, per-paragraph summaries, and bookmarking/resume.
 
 ## Contributing
 
