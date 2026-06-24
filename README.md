@@ -7,7 +7,7 @@ sentence and word** as it speaks, on a calm dark (or high-contrast) background.
 Built for people with **low vision, dyslexia, or ADHD** — and anyone who finds
 it easier to follow along when they can both see and hear the text.
 
-> Status: `0.1.0`, early release. The API may change before `1.0`.
+> Status: Early stages. The API may change before `1.0`.
 
 ## Why
 
