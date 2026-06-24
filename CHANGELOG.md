@@ -3,7 +3,7 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
-## [0.2.0] — 2026-06-24
+## [0.2.1] — 2026-06-24
 
 Decoupled content input from the component. The reader now makes **zero network
 calls** and has no opinion about where content comes from.
