@@ -7,6 +7,11 @@ import { splitSentences, parseMarkdown, parsePasted } from './parse.js';
 import { SystemEngine } from './engines/system-engine.js';
 import { KokoroEngine } from './engines/kokoro-engine.js';
 
+// Sanitization allowlists. Anything not listed is unwrapped to plain text, so
+// HTML from Markdown or extracted articles can never inject scripts/handlers.
+const ALLOWED_INLINE = new Set(['A', 'STRONG', 'EM', 'B', 'I', 'CODE', 'S', 'DEL', 'INS', 'MARK', 'SUP', 'SUB', 'SMALL', 'ABBR', 'SPAN', 'U', 'Q', 'CITE', 'TIME', 'BDI', 'BDO', 'WBR', 'KBD', 'SAMP', 'VAR']);
+const ALLOWED_BLOCK = new Set(['P', 'DIV', 'SPAN', 'UL', 'OL', 'LI', 'BLOCKQUOTE', 'PRE', 'CODE', 'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TH', 'TD', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'FIGURE', 'FIGCAPTION', 'HR', 'IMG', 'BR', ...ALLOWED_INLINE]);
+
 const TEMPLATE = /* html */ `
 <style>${CSS}</style>
 <div class="bar" role="region" aria-label="Reader controls">
@@ -186,33 +191,186 @@ export class ReadAlongReader extends HTMLElement {
     });
     return words;
   }
-  _registerSentence(el, text) {
+  // Turn a pre-built span (already containing .word spans) into a registered,
+  // clickable sentence.
+  _commitSentence(el, words) {
     const idx = this.sentences.length;
     el.classList.add('sent'); el.dataset.s = idx; el.setAttribute('role', 'button'); el.tabIndex = 0;
-    const words = this._fillWords(el, text);
-    this.sentences.push({ el, words, text });
+    this.sentences.push({ el, words, text: (el.textContent || '').replace(/\s+/g, ' ').trim() });
     el.addEventListener('click', () => this.startFrom(idx));
     el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.startFrom(idx); } });
   }
+  _registerSentence(el, text) { const words = this._fillWords(el, text); this._commitSentence(el, words); }
+
+  // --- safe inline rendering: preserves formatting while wrapping words ---
+  _parseInline(html) { const t = document.createElement('template'); t.innerHTML = String(html == null ? '' : html); return Array.from(t.content.childNodes); }
+
+  _cloneInline(el) {
+    const tag = el.tagName;
+    if (tag === 'IMG') {
+      const src = el.getAttribute('src') || '';
+      if (!/^(https?:|data:image\/)/i.test(src)) return null;
+      const img = document.createElement('img'); img.src = src; img.alt = el.getAttribute('alt') || ''; img.loading = 'lazy'; img.className = 'inline-img'; return img;
+    }
+    const out = document.createElement(tag.toLowerCase());
+    if (tag === 'A') {
+      const href = el.getAttribute('href') || '';
+      if (/^(https?:|mailto:|#)/i.test(href)) { out.setAttribute('href', href); if (!href.startsWith('#')) { out.target = '_blank'; out.rel = 'noopener noreferrer'; } }
+    } else if (tag === 'ABBR' || tag === 'TIME' || tag === 'BDO') {
+      const t = el.getAttribute('title') || el.getAttribute('datetime'); if (t) out.setAttribute('title', t);
+    }
+    return out;
+  }
+
+  // Render an inline value (string or {html}) into `container` as one or more
+  // clickable sentence spans. Inline formatting (bold/italic/links/code…) is
+  // preserved; anything not on the allowlist is unwrapped to plain text.
+  _renderSpoken(container, value, single = false) {
+    const v = (value && typeof value === 'object') ? value : { text: String(value == null ? '' : value) };
+    if (v.html == null) {
+      // plain-text fast path
+      const make = (txt) => { const span = document.createElement('span'); const words = this._fillWords(span, txt); this._commitSentence(span, words); return span; };
+      if (single) { container.appendChild(make(v.text)); }
+      else splitSentences(v.text).forEach(sen => { const s = make(sen); s.appendChild(document.createTextNode(' ')); container.appendChild(s); });
+      return;
+    }
+    this._renderInlineNodes(container, this._parseInline(v.html), single);
+  }
+
+  _renderInlineNodes(container, nodes, single) {
+    let sent = null;
+    const open = () => { sent = { el: document.createElement('span'), words: [] }; container.appendChild(sent.el); };
+    const finish = () => { if (sent && sent.words.length) this._commitSentence(sent.el, sent.words); sent = null; };
+    const addWord = (sink, text) => { const w = document.createElement('span'); w.className = 'word'; w.textContent = text; sink.appendChild(w); sent.words.push(w); };
+    const ENDS = /[.!?]["'”’)\]]*$/;
+
+    // append words inside an inline element (never break sentences here)
+    const noBreak = (childNodes, sink) => {
+      for (const n of childNodes) {
+        if (n.nodeType === 3) {
+          for (const p of n.textContent.split(/(\s+)/)) {
+            if (p === '') continue;
+            if (/^\s+$/.test(p)) sink.appendChild(document.createTextNode(p)); else addWord(sink, p);
+          }
+        } else if (n.nodeType === 1) {
+          if (n.tagName === 'BR') { sink.appendChild(document.createElement('br')); }
+          else if (n.tagName === 'IMG') { const im = this._cloneInline(n); if (im) sink.appendChild(im); }
+          else if (ALLOWED_INLINE.has(n.tagName)) { const cl = this._cloneInline(n); if (cl) { sink.appendChild(cl); noBreak(n.childNodes, cl); } else noBreak(n.childNodes, sink); }
+          else noBreak(n.childNodes, sink);
+        }
+      }
+    };
+
+    for (const n of nodes) {
+      if (n.nodeType === 3) {
+        for (const p of n.textContent.split(/(\s+)/)) {
+          if (p === '') continue;
+          if (/^\s+$/.test(p)) { if (sent) sent.el.appendChild(document.createTextNode(p)); continue; }
+          if (!sent) open();
+          addWord(sent.el, p);
+          if (!single && ENDS.test(p)) finish();
+        }
+      } else if (n.nodeType === 1) {
+        if (n.tagName === 'BR') { if (!sent) open(); sent.el.appendChild(document.createElement('br')); continue; }
+        if (n.tagName === 'IMG') { if (!sent) open(); const im = this._cloneInline(n); if (im) sent.el.appendChild(im); continue; }
+        if (!sent) open();
+        if (ALLOWED_INLINE.has(n.tagName)) { const cl = this._cloneInline(n); if (cl) { sent.el.appendChild(cl); noBreak(n.childNodes, cl); } else noBreak(n.childNodes, sent.el); }
+        else noBreak(n.childNodes, sent.el);
+      }
+    }
+    finish();
+  }
+
+  // Block-level sanitize for raw HTML blocks (rendered, not narrated).
+  _sanitizeBlock(nodes) {
+    const clean = (n) => {
+      if (n.nodeType === 3) return document.createTextNode(n.textContent);
+      if (n.nodeType !== 1) return null;
+      if (n.tagName === 'IMG') return this._cloneInline(n);
+      if (!ALLOWED_BLOCK.has(n.tagName)) { const f = document.createDocumentFragment(); for (const c of n.childNodes) { const cc = clean(c); if (cc) f.appendChild(cc); } return f; }
+      const el = (n.tagName === 'A') ? (this._cloneInline(n) || document.createElement('span')) : document.createElement(n.tagName.toLowerCase());
+      for (const c of n.childNodes) { const cc = clean(c); if (cc) el.appendChild(cc); }
+      return el;
+    };
+    const out = document.createDocumentFragment();
+    for (const n of nodes) { const c = clean(n); if (c) out.appendChild(c); }
+    return out;
+  }
+
+  _figure(mediaEl, caption) {
+    const fig = document.createElement('figure');
+    fig.appendChild(mediaEl);
+    if (caption) { const c = document.createElement('figcaption'); c.textContent = caption; fig.appendChild(c); }
+    return fig;
+  }
+
+  // Render one block. Text blocks (heading, p, quote, list items) are spoken;
+  // visual blocks (img, video, embed, code, table, hr, rawHtml) are rendered silently.
+  _renderBlock(art, block) {
+    if (block == null) return;
+    if (block.heading) {
+      const lvl = Math.min(6, Math.max(1, block.heading.level || 2));
+      const h = document.createElement('h' + lvl);
+      this._renderSpoken(h, block.heading.html != null ? { html: block.heading.html } : (block.heading.text || ''), true);
+      art.appendChild(h); return;
+    }
+    if (block.h2 != null) { const h = document.createElement('h2'); this._renderSpoken(h, block.h2, true); art.appendChild(h); return; }
+    if (block.p != null) { const p = document.createElement('p'); this._renderSpoken(p, block.p, false); art.appendChild(p); return; }
+    if (block.quote != null) { const bq = document.createElement('blockquote'); this._renderSpoken(bq, block.quote, false); art.appendChild(bq); return; }
+    if (block.list && Array.isArray(block.list.items)) {
+      const l = document.createElement(block.list.ordered ? 'ol' : 'ul');
+      block.list.items.forEach(it => { const li = document.createElement('li'); this._renderSpoken(li, it, true); l.appendChild(li); });
+      art.appendChild(l); return;
+    }
+    if (block.hr) { art.appendChild(document.createElement('hr')); return; }
+    if (block.img && /^(https?:|data:image\/)/i.test(block.img.src || '')) {
+      const img = document.createElement('img');
+      img.src = block.img.src; img.alt = block.img.alt || ''; img.loading = 'lazy'; img.decoding = 'async';
+      art.appendChild(this._figure(img, block.img.caption)); return;
+    }
+    if (block.video && /^https?:/i.test(block.video.src || '')) {
+      const v = document.createElement('video');
+      v.src = block.video.src; v.controls = true; v.preload = 'metadata';
+      if (block.video.poster) v.poster = block.video.poster;
+      art.appendChild(this._figure(v, block.video.caption)); return;
+    }
+    if (block.embed && /^https?:/i.test(block.embed.url || '')) {
+      const holder = document.createElement('div'); holder.className = 'embed';
+      const btn = document.createElement('button'); btn.className = 'embed-play'; btn.type = 'button';
+      btn.textContent = '▶ Load embedded media' + (block.embed.provider ? ` (${block.embed.provider})` : '');
+      btn.addEventListener('click', () => {
+        const f = document.createElement('iframe');
+        f.src = block.embed.url; f.loading = 'lazy'; f.allowFullscreen = true; f.title = block.embed.title || 'Embedded media';
+        f.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-popups');
+        holder.replaceChildren(f);
+      });
+      holder.appendChild(btn);
+      art.appendChild(this._figure(holder, block.embed.caption)); return;
+    }
+    if (block.code != null) {
+      const pre = document.createElement('pre'); const code = document.createElement('code');
+      if (block.lang) code.className = 'language-' + String(block.lang).replace(/[^\w-]/g, '');
+      code.textContent = block.code; pre.appendChild(code); art.appendChild(pre); return;
+    }
+    if (block.table && Array.isArray(block.table.rows)) {
+      const table = document.createElement('table');
+      block.table.rows.forEach((row, ri) => {
+        const tr = document.createElement('tr');
+        (row || []).forEach(cell => { const c = document.createElement(ri === 0 ? 'th' : 'td'); c.textContent = String(cell); tr.appendChild(c); });
+        table.appendChild(tr);
+      });
+      art.appendChild(table); return;
+    }
+    if (block.rawHtml != null) { const wrap = document.createElement('div'); wrap.className = 'rawhtml'; wrap.appendChild(this._sanitizeBlock(this._parseInline(block.rawHtml))); art.appendChild(wrap); return; }
+  }
+
   _render(doc) {
     this._hardStop(); this.state = 'idle'; this._setPlayBtn();
     const art = this._$('article');
     art.innerHTML = ''; this.sentences = [];
     if (doc.eyebrow) { const e = document.createElement('div'); e.className = 'eyebrow'; e.textContent = doc.eyebrow; art.appendChild(e); }
-    if (doc.title) { const h = document.createElement('h1'); this._registerSentence(h, doc.title); art.appendChild(h); }
-    (doc.blocks || []).forEach(block => {
-      if (block.h2) { const h = document.createElement('h2'); this._registerSentence(h, block.h2); art.appendChild(h); }
-      if (block.p) {
-        const p = document.createElement('p');
-        splitSentences(block.p).forEach(sen => {
-          const span = document.createElement('span');
-          this._registerSentence(span, sen);
-          span.appendChild(document.createTextNode(' '));
-          p.appendChild(span);
-        });
-        art.appendChild(p);
-      }
-    });
+    if (doc.title) { const h = document.createElement('h1'); this._renderSpoken(h, doc.title, true); art.appendChild(h); }
+    (doc.blocks || []).forEach(block => this._renderBlock(art, block));
     this.current = 0;
     this._emit('load', { title: doc.title, sentences: this.sentences.length });
   }

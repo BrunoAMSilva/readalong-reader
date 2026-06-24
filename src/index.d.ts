@@ -1,10 +1,27 @@
 // Type definitions for readalong-reader
 // Licensed under the GNU GPL v3.0 or later.
 
+/** A text value: plain string or sanitized inline HTML. */
+export type InlineText = string | { html: string };
+
+export type ReaderBlock =
+  | { p: InlineText }
+  | { heading: { level: number; text?: string; html?: string } }
+  | { h2: string }                       // legacy shorthand for a level-2 heading
+  | { quote: InlineText }
+  | { code: string; lang?: string }
+  | { hr: true }
+  | { rawHtml: string }
+  | { list: { ordered?: boolean; items: InlineText[] } }
+  | { img: { src: string; alt?: string; caption?: string } }
+  | { video: { src: string; poster?: string; caption?: string } }
+  | { embed: { url: string; provider?: string; title?: string; caption?: string } }
+  | { table: { rows: string[][] } };
+
 export interface ReaderDoc {
   eyebrow: string | null;
   title: string | null;
-  blocks: Array<{ h2?: string; p?: string }>;
+  blocks: ReaderBlock[];
 }
 
 export interface Utterance {

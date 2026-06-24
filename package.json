@@ -1,6 +1,6 @@
 {
   "name": "readalong-reader",
-  "version": "0.2.1",
+  "version": "0.4.0",
   "description": "Accessible read-along reader web component. Feed it Markdown (or a structured doc) and it reads aloud with synchronized word & sentence highlighting, dark/high-contrast themes, and focus dimming. Fully local, zero network calls. Built for low-vision and ADHD readers.",
   "type": "module",
   "main": "./src/index.js",
@@ -45,6 +45,9 @@
   ],
   "author": "Bruno Silva <brunoamsilva@gmail.com>",
   "license": "GPL-3.0-or-later",
+  "dependencies": {
+    "marked": "^12.0.2"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/brunoamsilva/readalong-reader.git"

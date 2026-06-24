@@ -32,6 +32,11 @@ you no visual anchor for where you are. `readalong-reader` is the opposite:
     [`kokoro-js`](https://www.npmjs.com/package/kokoro-js) (WebGPU, WASM
     fallback). Optional peer dependency — only loaded if you use it.
 - 🔦 Synchronized **sentence + word** highlighting and smooth auto-scroll.
+- 🖼️ **Rich content** — images, video, embeds (click-to-load), lists, blockquotes,
+  code, and tables render inline. Text is read aloud; visuals are shown silently.
+- 📝 **Full Markdown** (CommonMark + GFM via [marked](https://marked.js.org)) with
+  **inline formatting** (bold, italic, links, inline code…) preserved and real
+  **heading levels** (`h1`–`h6`). All HTML is sanitized against an allowlist.
 - 🌗 Dark / sepia / high-contrast themes, focus dimming, text-size, line-spacing,
   and speed controls.
 - 🔗 Feed it **Markdown**, plain text, or a structured `{title, blocks}` object.
@@ -150,7 +155,14 @@ const md = await (await fetch('https://r.jina.ai/' + articleUrl)).text();
 reader.loadDoc(parseMarkdown(md));
 ```
 
-The structured doc is just `{ eyebrow?, title?, blocks: [{ h2 } | { p }] }`.
+The structured doc is `{ eyebrow?, title?, blocks: [...] }`. Each block is one of
+`{p}`, `{heading:{level,text|html}}` (or legacy `{h2}`), `{quote}`, `{code,lang?}`,
+`{hr}`, `{rawHtml}`, `{list:{ordered?,items}}`, `{img:{src,alt?,caption?}}`,
+`{video:{src,poster?,caption?}}`, `{embed:{url,provider?,title?,caption?}}`, or
+`{table:{rows}}`. Text values (`p`/`heading`/`quote`/list items) may be a plain
+string **or** `{ html }` with inline markup. Text blocks are read aloud; images,
+video, embeds, code, tables, and raw HTML are rendered but not narrated. All HTML
+is sanitized by the component.
 
 ## Writing your own TTS engine
 
@@ -186,13 +198,15 @@ fetch articles, that happens in *your* code — see "Bring your own content".
 
 These are planned next steps — contributions welcome:
 
-- **Richer article rendering** — keep inline images, figures, and embedded video
-  from the source (currently text + headings only).
+- **Exact word timing for Kokoro** via the timestamped model variant.
+- More voices/languages, and bookmark/resume of reading position.
+- Optional spoken alt-text/captions for visuals (currently rendered silently).
 
 ## Contributing
 
-Issues and PRs welcome — accessibility feedback especially. Please keep the core
-dependency-free and the component usable without a build step.
+Issues and PRs welcome — accessibility feedback especially. Please keep the
+TTS/render core dependency-free (the only runtime dependency is `marked`, used
+solely by the Markdown parser) and the component usable without a build step.
 
 ## License
 

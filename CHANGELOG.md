@@ -3,6 +3,46 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] — 2026-06-24
+
+Full Markdown compliance, inline formatting, and real heading levels.
+
+### Added
+- `parseMarkdown` now uses [marked](https://marked.js.org) (CommonMark + GFM), so
+  emphasis, links, inline code, strikethrough, nested lists, tables, autolinks,
+  and more are parsed correctly. `marked` is a dependency (used only by the
+  Markdown path; the TTS/render core stays dependency-free).
+- **Inline formatting is preserved** on spoken blocks: bold, italic, links,
+  inline code, etc. render as real elements while words remain individually
+  highlightable. Text blocks now accept `{ html }` as well as a plain string.
+- **Heading levels** — new `{ heading: { level, text|html } }` block renders
+  `<h1>`–`<h6>`. (`{ h2 }` still works as a legacy shorthand.)
+- New `{ hr }` and `{ rawHtml }` blocks; raw HTML is block-sanitized.
+
+### Security
+- All HTML (from Markdown or extracted articles) is sanitized against an
+  allowlist of safe tags/attributes; scripts, event handlers, and `javascript:`
+  URLs are stripped. Links open with `rel="noopener noreferrer"`.
+
+### Changed
+- Headings render their text inside a sentence span (focus dimming now keys off
+  `.sent`), so all heading levels dim/highlight consistently.
+
+## [0.3.0] — 2026-06-24
+
+Rich content. The reader now renders more than headings and paragraphs.
+
+### Added
+- New block types in the doc model: `quote`, `code`, `list` (`{ordered, items}`),
+  `img` (`{src, alt, caption}`), `video` (`{src, poster, caption}`), `embed`
+  (`{url, provider, title, caption}`, click-to-load in a sandboxed iframe), and
+  `table` (`{rows}`). Backward compatible — existing `{p}` / `{h2}` docs are unchanged.
+- Spoken vs. visual: text blocks (paragraphs, headings, quotes, list items) are
+  read aloud and highlighted; images, video, embeds, code, and tables are rendered
+  but not narrated.
+- `parseMarkdown` now emits images, lists, blockquotes, and fenced code blocks.
+- Styles for all new elements; embeds are click-to-load (no autoplay/trackers).
+
 ## [0.2.1] — 2026-06-24
 
 Decoupled content input from the component. The reader now makes **zero network
