@@ -1,0 +1,67 @@
+{
+  "name": "readalong-reader",
+  "version": "0.2.0",
+  "description": "Accessible read-along reader web component. Feed it Markdown (or a structured doc) and it reads aloud with synchronized word & sentence highlighting, dark/high-contrast themes, and focus dimming. Fully local, zero network calls. Built for low-vision and ADHD readers.",
+  "type": "module",
+  "main": "./src/index.js",
+  "module": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": "./src/index.js",
+    "./reader": "./src/reader.js",
+    "./engines/system": "./src/engines/system-engine.js",
+    "./engines/kokoro": "./src/engines/kokoro-engine.js",
+    "./parse": "./src/parse.js"
+  },
+  "files": [
+    "src",
+    "examples",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "sideEffects": [
+    "./src/index.js"
+  ],
+  "scripts": {
+    "test": "node --check src/index.js && node --check src/reader.js && node --check src/parse.js && node --check src/engines/system-engine.js && node --check src/engines/kokoro-engine.js && echo ok",
+    "serve": "npx --yes http-server . -p 8080 -c-1"
+  },
+  "keywords": [
+    "accessibility",
+    "a11y",
+    "text-to-speech",
+    "tts",
+    "screen-reader",
+    "read-along",
+    "low-vision",
+    "dyslexia",
+    "adhd",
+    "web-component",
+    "custom-element",
+    "kokoro",
+    "highlighting",
+    "reader"
+  ],
+  "author": "Bruno Silva <brunoamsilva@gmail.com>",
+  "license": "GPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/brunoamsilva/readalong-reader.git"
+  },
+  "bugs": {
+    "url": "https://github.com/brunoamsilva/readalong-reader/issues"
+  },
+  "homepage": "https://github.com/brunoamsilva/readalong-reader#readme",
+  "peerDependencies": {
+    "kokoro-js": ">=1.2.0"
+  },
+  "peerDependenciesMeta": {
+    "kokoro-js": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

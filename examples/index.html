@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>readalong-reader — demo</title>
+<style>
+  body{margin:0;background:#1b1d22;color:#d7d3c8;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;}
+  read-along-reader{min-height:100vh;}
+</style>
+
+<!--
+  Import map lets the bare "kokoro-js" specifier resolve from a CDN with NO
+  build step. Remove it if you bundle the app yourself (npm install kokoro-js).
+-->
+<script type="importmap">
+{
+  "imports": {
+    "kokoro-js": "https://cdn.jsdelivr.net/npm/kokoro-js/+esm"
+  }
+}
+</script>
+</head>
+<body>
+
+<read-along-reader id="reader" engine="kokoro" theme="warm" focus></read-along-reader>
+
+<script type="module">
+  import '../src/index.js';
+  import { APPLE_DEMO } from './apple-demo.js';
+
+  const reader = document.getElementById('reader');
+  reader.loadDoc(APPLE_DEMO);
+
+  // Optional: observe events
+  reader.addEventListener('rar:sentence', e => console.log('reading:', e.detail.index));
+  reader.addEventListener('rar:end', () => console.log('finished'));
+</script>
+</body>
+</html>
