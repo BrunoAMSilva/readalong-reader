@@ -9,6 +9,8 @@ import { KokoroEngine } from './engines/kokoro-engine.js';
 
 // Sanitization allowlists. Anything not listed is unwrapped to plain text, so
 // HTML from Markdown or extracted articles can never inject scripts/handlers.
+// How many upcoming sentences to generate ahead of playback (buffer depth).
+const PREFETCH_AHEAD = 3;
 const ALLOWED_INLINE = new Set(['A', 'STRONG', 'EM', 'B', 'I', 'CODE', 'S', 'DEL', 'INS', 'MARK', 'SUP', 'SUB', 'SMALL', 'ABBR', 'SPAN', 'U', 'Q', 'CITE', 'TIME', 'BDI', 'BDO', 'WBR', 'KBD', 'SAMP', 'VAR']);
 const ALLOWED_BLOCK = new Set(['P', 'DIV', 'SPAN', 'UL', 'OL', 'LI', 'BLOCKQUOTE', 'PRE', 'CODE', 'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TH', 'TD', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'FIGURE', 'FIGCAPTION', 'HR', 'IMG', 'BR', ...ALLOWED_INLINE]);
 
@@ -132,7 +134,10 @@ export class ReadAlongReader extends HTMLElement {
   disconnectedCallback() { this.stop(); Object.values(this._engines).forEach(e => e.dispose && e.dispose()); }
 
   attributeChangedCallback(name, _old, val) {
-    if (name === 'engine' && val && val !== this._engineId) { this.engine = val; }
+    // Only react to a runtime engine change. Before the element is connected,
+    // attributes may still be arriving (e.g. `kokoro-module` set after `engine`);
+    // connectedCallback performs the initial engine setup once all are present.
+    if (name === 'engine' && val && val !== this._engineId && this.isConnected) { this.engine = val; }
     if (name === 'rate' && val) { this._rate = parseFloat(val) || 1; const r = this._$('rate'); if (r) r.value = this._rate; this._setRateLabel(); }
     if (name === 'markdown' && val != null && this.isConnected) this.loadMarkdown(val);
     if (name === 'text' && val != null && this.isConnected) this.loadText(val);
@@ -388,10 +393,19 @@ export class ReadAlongReader extends HTMLElement {
 
   /* ---------- engine orchestration ---------- */
   _getEngine(id) {
+    if (id === 'kokoro') {
+      const mod = this.getAttribute('kokoro-module') || undefined;
+      // Recreate if the cached engine was built with a different module spec
+      // (guards against an engine created before `kokoro-module` was set).
+      const cached = this._engines.kokoro;
+      if (cached && cached._module === (mod || 'kokoro-js')) return cached;
+      if (cached && cached.dispose) cached.dispose();
+      const eng = new KokoroEngine({ module: mod });
+      this._engines.kokoro = eng;
+      return eng;
+    }
     if (this._engines[id]) return this._engines[id];
-    let eng;
-    if (id === 'kokoro') eng = new KokoroEngine({ module: this.getAttribute('kokoro-module') || undefined });
-    else eng = new SystemEngine();
+    const eng = new SystemEngine();
     this._engines[id] = eng;
     return eng;
   }
@@ -433,8 +447,7 @@ export class ReadAlongReader extends HTMLElement {
     this._highlightSentence(i); this._clearWords(s);
     const tk = this._token;
     const utt = { text: s.text, words: s.words.map(w => ({ text: w.textContent, len: w.textContent.length })) };
-    // prefetch the next sentence (engines that support it)
-    if (this._engine.prefetch && this.sentences[i + 1]) this._engine.prefetch({ text: this.sentences[i + 1].text, words: [] });
+    // Queue the CURRENT sentence first (so it generates ahead of the buffer)…
     this._engine.speak(utt, {
       voice: this._voiceId,
       rate: this._rate,
@@ -443,17 +456,27 @@ export class ReadAlongReader extends HTMLElement {
       onError: err => { if (tk !== this._token) return; this._onEngineError(err, i); },
       cancelled: () => tk !== this._token,
     });
+    // …then buffer the next few so the next clip is ready when this one ends.
+    if (this._engine.prefetch) {
+      for (let k = 1; k <= PREFETCH_AHEAD; k++) {
+        const n = this.sentences[i + k];
+        if (n) this._engine.prefetch({ text: n.text, words: [] });
+      }
+    }
   }
 
   _onEngineError(err, i) {
+    const detail = (err && (err.message || String(err))) || 'unknown error';
+    if (typeof console !== 'undefined') console.error('[readalong-reader] natural voice failed:', err);
+    this._emit('voiceerror', { engine: this._engineId, message: detail });
     if (this._engineId === 'kokoro') {
-      // graceful fallback to the always-available system voice
-      this._showStatus('Couldn’t load the local voice (needs internet on first run, and a WebGPU browser like Chrome). Using system voice.', false);
-      setTimeout(() => this._hideStatus(), 6000);
+      // graceful fallback to the always-available system voice — but surface why
+      this._showStatus('Natural voice unavailable — using system voice. (' + detail + ')', false);
+      setTimeout(() => this._hideStatus(), 9000);
       this._setEngineButtons('system');
       this._useEngine('system', true).then(() => { if (this.state === 'playing') this.startFrom(i); });
     } else {
-      this._showStatus('Speech error: ' + (err && err.message || 'unknown'), false);
+      this._showStatus('Speech error: ' + detail, false);
       setTimeout(() => this._hideStatus(), 5000);
     }
   }

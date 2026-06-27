@@ -3,6 +3,26 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.4.2] — 2026-06-24
+
+### Performance
+- Smoother Kokoro playback: the reader now buffers several sentences ahead
+  (`PREFETCH_AHEAD = 3`) and generation is serialized onto a single queue (the
+  ONNX model is one session, so concurrent calls were unsafe/slower). The next
+  clip is ready when the current finishes, removing the long pause between
+  phrases. First sentence still has a one-time warm-up while it generates.
+
+## [0.4.1] — 2026-06-24
+
+### Fixed
+- Kokoro engine could be created with the default `'kokoro-js'` specifier if the
+  `engine` attribute was set before `kokoro-module` (the `engine` attribute is
+  no longer acted on until the element is connected, by which point all
+  attributes are present). Also recreate the cached engine if `kokoro-module`
+  changes. Fixes "Failed to resolve module specifier 'kokoro-js'".
+- The natural-voice fallback now reports the underlying error in the status bar
+  and console instead of a generic message.
+
 ## [0.4.0] — 2026-06-24
 
 Full Markdown compliance, inline formatting, and real heading levels.
